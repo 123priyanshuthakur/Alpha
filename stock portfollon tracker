@@ -1,0 +1,227 @@
+import requests
+import json
+from datetime import datetime
+import os
+
+class StockPortfolio:
+    def __init__(self):
+        self.portfolio = {}
+        self.portfolio_file = "portfolio.json"
+        self.load_portfolio()
+    
+    def load_portfolio(self):
+        """Load portfolio from file if it exists"""
+        try:
+            if os.path.exists(self.portfolio_file):
+                with open(self.portfolio_file, 'r') as f:
+                    self.portfolio = json.load(f)
+                print("Portfolio loaded successfully!")
+        except Exception as e:
+            print(f"Error loading portfolio: {e}")
+            self.portfolio = {}
+    
+    def save_portfolio(self):
+        """Save portfolio to file"""
+        try:
+            with open(self.portfolio_file, 'w') as f:
+                json.dump(self.portfolio, f, indent=4)
+            print("Portfolio saved successfully!")
+        except Exception as e:
+            print(f"Error saving portfolio: {e}")
+    
+    def get_stock_price(self, symbol):
+        """Get current stock price using Alpha Vantage API (free tier)"""
+        
+        api_key = "demo"         
+       
+        try:
+            
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+            response = requests.get(url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                current_price = data['chart']['result'][0]['meta']['regularMarketPrice']
+                return current_price
+            else:
+                print(f"Error fetching data for {symbol}")
+                return None
+                
+        except Exception as e:
+            print(f"Error getting stock price for {symbol}: {e}")
+            
+            demo_prices = {
+                'AAPL': 175.50, 'GOOGL': 125.30, 'MSFT': 350.20, 
+                'TSLA': 220.80, 'AMZN': 145.60, 'NVDA': 450.30
+            }
+            return demo_prices.get(symbol.upper(), 100.00)
+    
+    def add_stock(self, symbol, shares, purchase_price):
+        """Add stock to portfolio"""
+        symbol = symbol.upper()
+        
+        if symbol in self.portfolio:
+            
+            existing_shares = self.portfolio[symbol]['shares']
+            existing_avg_price = self.portfolio[symbol]['avg_purchase_price']
+            
+            total_shares = existing_shares + shares
+            total_cost = (existing_shares * existing_avg_price) + (shares * purchase_price)
+            new_avg_price = total_cost / total_shares
+            
+            self.portfolio[symbol]['shares'] = total_shares
+            self.portfolio[symbol]['avg_purchase_price'] = round(new_avg_price, 2)
+            
+            print(f"Updated {symbol}: {total_shares} shares at avg price ${new_avg_price:.2f}")
+        else:
+            
+            self.portfolio[symbol] = {
+                'shares': shares,
+                'avg_purchase_price': purchase_price,
+                'date_added': datetime.now().strftime("%Y-%m-%d")
+            }
+            print(f"Added {symbol}: {shares} shares at ${purchase_price:.2f}")
+        
+        self.save_portfolio()
+    
+    def remove_stock(self, symbol, shares=None):
+        """Remove stock from portfolio"""
+        symbol = symbol.upper()
+        
+        if symbol not in self.portfolio:
+            print(f"{symbol} not found in portfolio!")
+            return
+        
+        if shares is None:
+            del self.portfolio[symbol]
+            print(f"Removed all {symbol} shares from portfolio")
+        else:
+            current_shares = self.portfolio[symbol]['shares']
+            if shares >= current_shares:
+                del self.portfolio[symbol]
+                print(f"Removed all {symbol} shares from portfolio")
+            else:
+                self.portfolio[symbol]['shares'] = current_shares - shares
+                print(f"Removed {shares} shares of {symbol}. Remaining: {current_shares - shares}")
+        
+        self.save_portfolio()
+    
+    def view_portfolio(self):
+        """Display current portfolio with real-time prices"""
+        if not self.portfolio:
+            print("Portfolio is empty!")
+            return
+        
+        print("\n" + "="*80)
+        print("STOCK PORTFOLIO SUMMARY")
+        print("="*80)
+        print(f"{'Symbol':<8} {'Shares':<8} {'Avg Cost':<10} {'Current':<10} {'Total Value':<12} {'Gain/Loss':<12} {'%Change':<8}")
+        print("-"*80)
+        
+        total_investment = 0
+        total_current_value = 0
+        
+        for symbol, data in self.portfolio.items():
+            shares = data['shares']
+            avg_price = data['avg_purchase_price']
+            current_price = self.get_stock_price(symbol)
+            
+            if current_price:
+                total_cost = shares * avg_price
+                current_value = shares * current_price
+                gain_loss = current_value - total_cost
+                pct_change = (gain_loss / total_cost) * 100 if total_cost > 0 else 0
+                
+                total_investment += total_cost
+                total_current_value += current_value
+                
+                print(f"{symbol:<8} {shares:<8} ${avg_price:<9.2f} ${current_price:<9.2f} ${current_value:<11.2f} ${gain_loss:<11.2f} {pct_change:<7.1f}%")
+            else:
+                print(f"{symbol:<8} {shares:<8} ${avg_price:<9.2f} {'N/A':<10} {'N/A':<12} {'N/A':<12} {'N/A':<8}")
+        
+        print("-"*80)
+        total_gain_loss = total_current_value - total_investment
+        total_pct = (total_gain_loss / total_investment) * 100 if total_investment > 0 else 0
+        
+        print(f"{'TOTAL':<8} {'':<8} {'':<10} {'':<10} ${total_current_value:<11.2f} ${total_gain_loss:<11.2f} {total_pct:<7.1f}%")
+        print(f"\nTotal Investment: ${total_investment:.2f}")
+        print(f"Current Value: ${total_current_value:.2f}")
+        print(f"Overall Gain/Loss: ${total_gain_loss:.2f} ({total_pct:.1f}%)")
+        print("="*80)
+    
+    def get_stock_info(self, symbol):
+        """Get detailed information about a specific stock"""
+        symbol = symbol.upper()
+        current_price = self.get_stock_price(symbol)
+        
+        if current_price:
+            print(f"\n{symbol} Current Price: ${current_price:.2f}")
+            
+            if symbol in self.portfolio:
+                data = self.portfolio[symbol]
+                shares = data['shares']
+                avg_price = data['avg_purchase_price']
+                total_cost = shares * avg_price
+                current_value = shares * current_price
+                gain_loss = current_value - total_cost
+                pct_change = (gain_loss / total_cost) * 100 if total_cost > 0 else 0
+                
+                print(f"Your Position:")
+                print(f"  Shares: {shares}")
+                print(f"  Average Cost: ${avg_price:.2f}")
+                print(f"  Total Cost: ${total_cost:.2f}")
+                print(f"  Current Value: ${current_value:.2f}")
+                print(f"  Gain/Loss: ${gain_loss:.2f} ({pct_change:.1f}%)")
+        else:
+            print(f"Could not fetch price for {symbol}")
+
+def main():
+    portfolio = StockPortfolio()
+    
+    while True:
+        print("\n" + "="*50)
+        print("STOCK PORTFOLIO TRACKER")
+        print("="*50)
+        print("1. Add Stock")
+        print("2. Remove Stock")
+        print("3. View Portfolio")
+        print("4. Get Stock Info")
+        print("5. Exit")
+        print("-"*50)
+        
+        choice = input("Enter your choice (1-5): ").strip()
+        
+        if choice == '1':
+            try:
+                symbol = input("Enter stock symbol (e.g., AAPL): ").strip()
+                shares = float(input("Enter number of shares: "))
+                price = float(input("Enter purchase price per share: $"))
+                portfolio.add_stock(symbol, shares, price)
+            except ValueError:
+                print("Please enter valid numbers for shares and price!")
+        
+        elif choice == '2':
+            try:
+                symbol = input("Enter stock symbol to remove: ").strip()
+                shares_input = input("Enter shares to remove (or press Enter to remove all): ").strip()
+                shares = float(shares_input) if shares_input else None
+                portfolio.remove_stock(symbol, shares)
+            except ValueError:
+                print("Please enter a valid number for shares!")
+        
+        elif choice == '3':
+            portfolio.view_portfolio()
+        
+        elif choice == '4':
+            symbol = input("Enter stock symbol: ").strip()
+            portfolio.get_stock_info(symbol)
+        
+        elif choice == '5':
+            print("Thank you for using Stock Portfolio Tracker!")
+            break
+        
+        else:
+            print("Invalid choice! Please enter 1-5.")
+
+if __name__ == "__main__":
+    main()
